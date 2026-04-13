@@ -107,32 +107,45 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/1cbf7c50"):
                     return False
 
             # --- 核心操作：查找并点击续期按钮 ---
-            print("等待面板数据加载...")
-            time.sleep(3) # 强制等待 3 秒，让前端有时间反应
+            print("等待面板基础框架加载...")
+            time.sleep(5) # 给网页基本的加载时间
 
+            # 【关键修复1】强行向下滚动页面，触发底部按钮的渲染！
+            print("向下滚动页面以加载完整内容...")
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(3) # 等待滚动后的网络请求完成
+
+            print("正在寻找 '연장하기' 按钮...")
             try:
-                # 1. 把绿色的 "지금 연장이 가능해요" 提示文字作为锚点
-                # 将等待时间放宽到 60 秒，应对 Weirdhost 常见的面板卡顿
-                print("正在等待 '지금 연장이 가능해요' (可续期状态) 出现...")
-                page.wait_for_selector('text="지금 연장이 가능해요"', state='visible', timeout=60000)
-                print("检测到可续期状态，数据加载完毕！")
+                # 只要求按钮出现在 DOM 里，不要求立刻能点
+                add_button = page.locator('button:has-text("연장하기")')
+                add_button.wait_for(state='attached', timeout=45000)
 
-                # 2. 定位并点击按钮
-                add_button_selector = 'button:has-text("연장하기")'
-                add_button = page.locator(add_button_selector)
-                
-                # 直接调用 click()。Playwright 会自动在底层循环等待按钮变为真正可点击的 active 状态
-                add_button.click(timeout=15000)
-                print("成功点击 '연장하기' 按钮。")
-                
-                time.sleep(10) # 续期请求发送后，强制休眠 10 秒确保服务器后端处理完毕
-                print("任务完成。")
+                # 【关键修复2】再次确保按钮在可视区域内
+                add_button.scroll_into_view_if_needed()
+                print("🎯 找到续期按钮！正在判断是否可点击...")
+
+                # 【关键修复3】智能轮询：循环判断按钮是否解除禁用状态
+                for i in range(15): # 最多循环15次，每次等2秒（共30秒）
+                    if add_button.is_enabled():
+                        print(f"✨ 按钮已激活！准备执行点击...")
+                        add_button.click(force=True) # force=True 无视部分前端遮挡
+                        print("✅ 成功点击 '연장하기' 按钮！")
+                        time.sleep(10) # 留出时间给服务器处理续期请求
+                        browser.close()
+                        return True
+                    else:
+                        print(f"按钮目前为灰色不可用（正在加载数据或未到时间），等待2秒重试... ({i+1}/15)")
+                        time.sleep(2)
+
+                print("❌ 错误：按钮找到了，但长达30秒一直处于灰色不可点击状态（Disabled）。可能还没到续期冷却时间！")
+                page.screenshot(path="button_disabled_timeout.png")
                 browser.close()
-                return True
+                return False
 
             except PlaywrightTimeoutError:
-                print("错误: 60秒内未进入可续期状态。可能是面板极度卡顿，或者该服务器当前不可续期（例如时间还没到）。")
-                page.screenshot(path="add_button_timeout.png")
+                print("❌ 错误: 45秒内网页根本没有渲染出 '연장하기' 按钮。可能是面板网络卡死。")
+                page.screenshot(path="add_button_not_found.png")
                 browser.close()
                 return False
 
