@@ -108,43 +108,58 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/1cbf7c50"):
 
             # --- 核心操作：查找并点击续期按钮 ---
             print("等待面板基础框架加载...")
-            time.sleep(5) # 给网页基本的加载时间
+            time.sleep(5) 
 
-            # 【关键修复1】强行向下滚动页面，触发底部按钮的渲染！
+            # 向下滚动页面以加载完整内容
             print("向下滚动页面以加载完整内容...")
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(3) # 等待滚动后的网络请求完成
+            time.sleep(3) 
+
+            # 【新增核心逻辑：处理 Cloudflare 人机验证】
+            print("正在检查是否触发了 Cloudflare 人机验证...")
+            try:
+                # 定位 Cloudflare 的 iframe 验证框
+                cf_iframe = page.locator('iframe[src*="challenges.cloudflare.com"]')
+                # 等待最多 10 秒看它出不出现
+                cf_iframe.wait_for(state='visible', timeout=10000)
+                print("⚠️ 发现 Cloudflare 验证框！尝试模拟真人点击...")
+                
+                # 点击验证框的中心区域
+                cf_iframe.click(force=True)
+                print("已点击验证框，等待 8 秒让 Cloudflare 验证...")
+                time.sleep(8) 
+            except PlaywrightTimeoutError:
+                print("✅ 10秒内未检测到明文的 Cloudflare 验证框，继续执行...")
+            except Exception as e:
+                print(f"处理 Cloudflare 验证时出现预期外的状况: {e}")
 
             print("正在寻找 '연장하기' 按钮...")
             try:
-                # 只要求按钮出现在 DOM 里，不要求立刻能点
                 add_button = page.locator('button:has-text("연장하기")')
-                add_button.wait_for(state='attached', timeout=45000)
-
-                # 【关键修复2】再次确保按钮在可视区域内
+                add_button.wait_for(state='attached', timeout=15000)
                 add_button.scroll_into_view_if_needed()
                 print("🎯 找到续期按钮！正在判断是否可点击...")
 
-                # 【关键修复3】智能轮询：循环判断按钮是否解除禁用状态
-                for i in range(15): # 最多循环15次，每次等2秒（共30秒）
+                # 智能轮询：循环判断按钮是否解除禁用状态
+                for i in range(15): 
                     if add_button.is_enabled():
                         print(f"✨ 按钮已激活！准备执行点击...")
-                        add_button.click(force=True) # force=True 无视部分前端遮挡
+                        add_button.click(force=True) 
                         print("✅ 成功点击 '연장하기' 按钮！")
-                        time.sleep(10) # 留出时间给服务器处理续期请求
+                        time.sleep(10) 
                         browser.close()
                         return True
                     else:
-                        print(f"按钮目前为灰色不可用（正在加载数据或未到时间），等待2秒重试... ({i+1}/15)")
+                        print(f"按钮仍为灰色不可用，等待2秒重试... ({i+1}/15)")
                         time.sleep(2)
 
-                print("❌ 错误：按钮找到了，但长达30秒一直处于灰色不可点击状态（Disabled）。可能还没到续期冷却时间！")
-                page.screenshot(path="button_disabled_timeout.png")
+                print("❌ 错误：长达30秒一直处于灰色不可点击状态。大概率是被 Cloudflare 彻底拦截了！")
+                page.screenshot(path="cf_block_timeout.png")
                 browser.close()
                 return False
 
             except PlaywrightTimeoutError:
-                print("❌ 错误: 45秒内网页根本没有渲染出 '연장하기' 按钮。可能是面板网络卡死。")
+                print("❌ 错误: 找不到 '연장하기' 按钮。")
                 page.screenshot(path="add_button_not_found.png")
                 browser.close()
                 return False
