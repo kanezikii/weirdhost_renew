@@ -106,23 +106,33 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/1cbf7c50"):
                     browser.close()
                     return False
 
-            # --- 核心操作：查找并点击 "시간추가" 按钮 ---
-            add_button_selector = 'button:has-text("연장하기")' # 适配 Weirdhost 最新面板文案
-            print(f"正在查找并等待 '{add_button_selector}' 按钮...")
+            # --- 核心操作：查找并点击续期按钮 ---
+            print("等待面板数据加载...")
+            time.sleep(3) # 强制等待 3 秒，让前端有时间反应
 
             try:
-                # 等待按钮变为可见且可点击
+                # 1. 把绿色的 "지금 연장이 가능해요" 提示文字作为锚点
+                # 将等待时间放宽到 60 秒，应对 Weirdhost 常见的面板卡顿
+                print("正在等待 '지금 연장이 가능해요' (可续期状态) 出现...")
+                page.wait_for_selector('text="지금 연장이 가능해요"', state='visible', timeout=60000)
+                print("检测到可续期状态，数据加载完毕！")
+
+                # 2. 定位并点击按钮
+                add_button_selector = 'button:has-text("연장하기")'
                 add_button = page.locator(add_button_selector)
-                add_button.wait_for(state='visible', timeout=30000)
-                add_button.click()
-                print("成功点击 '시간추가' 按钮。")
-                time.sleep(9) # 等待9秒，确保操作在服务器端生效
+                
+                # 直接调用 click()。Playwright 会自动在底层循环等待按钮变为真正可点击的 active 状态
+                add_button.click(timeout=15000)
+                print("成功点击 '연장하기' 按钮。")
+                
+                time.sleep(10) # 续期请求发送后，强制休眠 10 秒确保服务器后端处理完毕
                 print("任务完成。")
                 browser.close()
                 return True
+
             except PlaywrightTimeoutError:
-                print(f"错误: 在30秒内未找到或 '시간추가' 按钮不可见/不可点击。")
-                page.screenshot(path="add_6h_button_not_found.png")
+                print("错误: 60秒内未进入可续期状态。可能是面板极度卡顿，或者该服务器当前不可续期（例如时间还没到）。")
+                page.screenshot(path="add_button_timeout.png")
                 browser.close()
                 return False
 
