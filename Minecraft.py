@@ -2,7 +2,7 @@ import os
 import time
 from playwright.sync_api import sync_playwright, Cookie, TimeoutError as PlaywrightTimeoutError
 
-def add_server_time(server_url="https://hub.weirdhost.xyz/server/2bb30b54"):
+def add_server_time(server_url="https://hub.weirdhost.xyz/server/9bde6441"):
     """
     请将2bb30b54换为自己服务器的编号，
     尝试登录 hub.weirdhost.xyz 并点击 "시간 추가" 按钮。
