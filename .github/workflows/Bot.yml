@@ -1,78 +1,56 @@
 name: 七天一续Bot
 
 on:
-  workflow_dispatch: # 允许在 Actions 页面手动触发此工作流，方便测试
+  workflow_dispatch: # 允许手动触发
   schedule:
-    # 使用 CRON 表达式定义定时任务，所有时间均为 UTC 时间。
-    # '0 4 * * *' 表示在 UTC 时间的每天凌晨4点执行。
-    # 如果您位于东八区（如北京时间），这对应您本地时间的每天中午12点。
-    # 如果您在其他时区，请相应调整。例如东九区（东京/首尔时间）中午12点是UTC时间3点，应为 '0 3 * * *'。
-    - cron: '15 2 * * 0'
+    # UTC 04:00 对应北京时间中午 12:00
+    - cron: '0 4 * * *'
 
 jobs:
   add_time:
-    runs-on: ubuntu-latest # 在最新的 Ubuntu 环境上运行
-
-    # 【【【 核心修改点在这里 】】】
-    # 授予工作流写入仓库内容的权限
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest 
+    # 删除了 contents: write 权限，因为我们不再向仓库提交文件了
 
     steps:
-      - name: Checkout repository # 步骤1: 检出（下载）你的代码到运行环境中
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python # 步骤2: 设置 Python 环境
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x' # 使用最新的 Python 3
+          python-version: '3.x'
 
-      - name: Install Playwright and dependencies # 步骤3: 安装 Playwright 及其浏览器依赖
+      - name: Install Playwright and dependencies
         run: |
           pip install playwright
-          playwright install --with-deps chromium # 安装 Chromium 浏览器及其运行所需的所有依赖
+          playwright install --with-deps chromium
 
-      - name: Run Time Adder Script # 步骤4: 运行你的 Python 脚本
+      - name: Run Time Adder Script
         env:
-          # 从 GitHub Secrets 读取环境变量，这些值绝不会在日志中明文显示
-          # 优先使用 Cookie 登录
           REMEMBER_WEB_COOKIE: ${{ secrets.REMEMBER_WEB_COOKIE }}
-          # 如果 Cookie 失效或未设置，则使用下面的邮箱和密码
           PTERODACTYL_EMAIL: ${{ secrets.PTERODACTYL_EMAIL }}
           PTERODACTYL_PASSWORD: ${{ secrets.PTERODACTYL_PASSWORD }}
         run: python Bot.py
 
-      - name: Upload error artifacts # 步骤5: 如果脚本运行失败，上传截图用于调试
-        if: failure() # 仅在上一步失败时运行
+      - name: Upload error artifacts
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: error-screenshots # 上传后的文件包名称
-          path: "*.png" # 上传所有以 .png 结尾的文件
+          name: error-screenshots-bot # 修改了名字以防冲突
+          path: "*.png"
 
-      - name: Update README with timestamp
+      # 【新增】Telegram 消息通知
+      - name: Send Telegram Notification
+        if: always() # 无论成功还是失败，都执行此步
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: |
-          # 生成当前时间
-          UTC_TIME=$(date -u +'%Y-%m-%d %H:%M:%S')
-          BJ_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')
-          
-          # 在 README 末尾添加或更新时间戳
-          TIMESTAMP_SECTION="\n## 🕒 Bot最后更新时间\n\n"
-          TIMESTAMP_SECTION+="**UTC**: \`$UTC_TIME\`  \n"
-          TIMESTAMP_SECTION+="**北京时间**: \`$BJ_TIME\`  \n\n"
-          TIMESTAMP_SECTION+="> ⚡ 此时间戳由 GitHub Actions 自动更新\n"
-          
-          # 检查是否已经有时间戳部分
-          if grep -q "## 🕒 Bot最后更新时间" README.md; then
-            sed -i '/## 🕒 最后更新时间/,/^## \|^# /{//!d}' README.md
-            sed -i '/## 🕒 最后更新时间/d' README.md
+          if [ "${{ job.status }}" = "success" ]; then
+            MSG="✅ 【Weirdhost Bot (1cbf7c50)】 智能续期脚本执行成功/状态正常！"
+          else
+            MSG="❌ 【Weirdhost Bot (1cbf7c50)】 智能续期脚本执行失败，请登录 GitHub 查看日志！"
           fi
-          
-          echo -e "$TIMESTAMP_SECTION" >> README.md
-          
-      - name: Auto commit changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto deploy by Github Actions"
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
-          file_pattern: README.md
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT_ID}" \
+            -d text="${MSG}"
