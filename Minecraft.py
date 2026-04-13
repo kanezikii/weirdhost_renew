@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright, Cookie, TimeoutError as Playwri
 def add_server_time(server_url="https://hub.weirdhost.xyz/server/9bde6441"):
     """
     请将2bb30b54换为自己服务器的编号，
-    尝试登录 hub.weirdhost.xyz 并点击 "시간 추가" 按钮。
+    尝试登录 hub.weirdhost.xyz 并点击 "연장하기" 按钮。
     优先使用 REMEMBER_WEB_COOKIE 进行会话登录，如果不存在则回退到邮箱密码登录。
     此函数设计为每次GitHub Actions运行时执行一次。
     """
@@ -108,7 +108,7 @@ def add_server_time(server_url="https://hub.weirdhost.xyz/server/9bde6441"):
                     return False
 
             # --- 核心操作：查找并点击 "시간 추가" 按钮 ---
-            add_button_selector = 'button:has-text("시간 추가")' # 已更新为新的按钮文本
+            add_button_selector = 'button:has-text("연장하기")' # 适配 Weirdhost 最新面板文案
             print(f"正在查找并等待 '{add_button_selector}' 按钮...")
 
             try:
